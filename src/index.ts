@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
+import { registerCaracatTools } from "./caracat";
 
 /**
  * Baut fuer jeden Request eine frische McpServer-Instanz.
@@ -8,11 +9,16 @@ import { z } from "zod";
  * Wichtig: Hier die Factory uebergeben, nicht eine globale Instanz --
  * der Handler ist stateless und erwartet pro Request einen eigenen Server.
  */
-function createServer() {
+function createServer(request?: Request) {
   const server = new McpServer({
     name: "my-mcp-server",
     version: "1.0.0",
   });
+
+  // Die Caracat-Assistenten. Sie brauchen die urspruengliche HTTP-Anfrage,
+  // weil der Hugging-Face-Schluessel des Aufrufers in deren
+  // Authorization-Header steht -- dieser Server haelt keinen eigenen.
+  registerCaracatTools(server, request);
 
   // --- Tool 1: einfachster Fall, ein optionaler String-Parameter -----------
   server.registerTool(
@@ -142,7 +148,10 @@ function createServer() {
   return server;
 }
 
-const mcpHandler = createMcpHandler(createServer);
+// Die Factory bekommt pro Anfrage einen Kontext, in dem die urspruengliche
+// HTTP-Anfrage steckt. Genau darueber kommt der Schluessel des Aufrufers zu
+// den Caracat-Werkzeugen.
+const mcpHandler = createMcpHandler((ctx) => createServer(ctx.requestInfo));
 
 export default {
   fetch(request: Request, env: unknown, ctx: ExecutionContext) {

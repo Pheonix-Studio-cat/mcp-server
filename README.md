@@ -10,6 +10,62 @@ https://my-mcp-server.<dein-subdomain>.workers.dev/mcp
 die du in Claude, VS Code, im MCP Inspector oder in jedem anderen MCP-Client
 eintragen kannst.
 
+## Caracat
+
+Dieser Server stellt die drei Caracat-Assistenten als Werkzeuge bereit, damit
+ein anderes KI-System sie aufrufen kann.
+
+| Werkzeug | Modell | Wofuer |
+| --- | --- | --- |
+| `list_assistants` | — | Namen, Basismodelle, Zuschreibung. Braucht keinen Schluessel |
+| `ask_caracat_ai` | `openai/gpt-oss-20b` | alles: denken, schreiben, planen, lernen, entscheiden |
+| `ask_caracat_code` | `Qwen/Qwen3-Coder-Next` | nur Programmierung |
+| `ask_caracat_pro` | `deepseek-ai/DeepSeek-V3.1` | die schweren Fragen — und entsprechend teurer |
+
+Jedes `ask_*` nimmt `question` und optional `deep` (mehr Platz zum Ausholen,
+kostet mehr). Es gibt keinen Gespraechsverlauf: jede Frage steht fuer sich.
+
+### Der Schluessel kommt vom Aufrufer
+
+**Dieser Server haelt keinen eigenen Hugging-Face-Schluessel.** Jeder Aufruf
+wird auf den Token abgerechnet, den der Client als `Authorization: Bearer`
+mitschickt.
+
+Der Grund steht in `SECURITY.md`: eine oeffentliche Adresse, die bezahlte
+Modelle auf dem Guthaben des Betreibers aufruft, ist eine offene Brieftasche.
+Ein kostenloses Hugging-Face-Konto reicht fuer die beiden kleineren
+Assistenten.
+
+In einem Client sieht das etwa so aus:
+
+```json
+{
+  "mcpServers": {
+    "caracat": {
+      "url": "https://my-mcp-server.<dein-subdomain>.workers.dev/mcp",
+      "headers": { "Authorization": "Bearer hf_..." }
+    }
+  }
+}
+```
+
+### Die Persoenlichkeiten
+
+Die drei System-Prompts liegen **nicht** in diesem Repo, sondern in `prompts/`
+des Modell-Repos — eine Quelle, keine Kopie, die driftet. `npm run deploy` holt
+sie vorher (`scripts/fetch-personas.mjs`) und **bricht ab**, wenn eine fehlt:
+ein Server ohne sie waere kein Caracat, sondern ein nackter Modellaufruf.
+
+### Pruefen ohne zu deployen
+
+```bash
+npm run typecheck
+npm run check              # 42 Pruefungen gegen den echten Handler
+node checks/counterproof.mjs   # bricht ihn absichtlich, sieben Mal
+```
+
+Beides ohne Netz zum Anbieter: Hugging Face wird gestubbt, nichts kostet Geld.
+
 ## Stack
 
 | Baustein | Zweck |
