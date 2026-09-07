@@ -147,7 +147,12 @@ Vier Beispiel-Tools, die die ueblichen Muster zeigen:
 | `greet` | ein optionaler Parameter, einfachster Fall |
 | `add` | mehrere Pflichtparameter und `structuredContent` |
 | `get_time` | Logik ohne externen Aufruf plus Fehlerpfad ueber `isError` |
-| `fetch_url` | echter ausgehender `fetch` mit try/catch und Kuerzung |
+
+Ein viertes Beispiel, `fetch_url`, gab es hier einmal. Es ist am 2026-09-07
+entfernt worden, als der Worker unter einer oeffentlichen Adresse erreichbar
+wurde — siehe `SECURITY.md`. Wenn du ein Werkzeug mit echtem ausgehendem
+`fetch` als Vorlage brauchst: die Caracat-Werkzeuge in `src/caracat.ts` sind
+eins, nur mit fest verdrahteter Adresse statt einer aus dem Parameter.
 
 ## Eigene Tools ergaenzen
 

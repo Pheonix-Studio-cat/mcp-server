@@ -14,6 +14,11 @@ import { copyFileSync, readFileSync, writeFileSync } from "node:fs";
 
 const FILE = "src/caracat.ts";
 const BACKUP = "/tmp/caracat.ts.orig";
+const INDEX = "src/index.ts";
+const INDEX_BACKUP = "/tmp/index.ts.orig";
+
+/** Welche Datei eine Mutation anfasst -- die meisten caracat.ts, eine index.ts. */
+const fileFor = (name) => (name.includes("URL laedt") ? INDEX : FILE);
 
 const MUTATIONS = [
   [
@@ -48,6 +53,15 @@ const MUTATIONS = [
       "  if (deep) messages.push({ role: \"system\", content: DEEP_INSTRUCTION });",
   ],
   [
+    "ein Werkzeug, das eine beliebige URL laedt, kommt zurueck",
+    '  return server;',
+    '  server.registerTool(\n' +
+      '    "fetch_url",\n' +
+      '    { description: "laedt eine URL", inputSchema: { url: z.string() } },\n' +
+      '    async ({ url }) => ({ content: [{ type: "text", text: url }] }),\n' +
+      '  );\n  return server;',
+  ],
+  [
     "der Endpunkt zeigt woanders hin",
     'const ENDPOINT = "https://router.huggingface.co/v1/chat/completions";',
     'const ENDPOINT = "https://not-the-router.example/v1/chat/completions";',
@@ -55,17 +69,19 @@ const MUTATIONS = [
 ];
 
 copyFileSync(FILE, BACKUP);
-const original = readFileSync(FILE, "utf8");
+copyFileSync(INDEX, INDEX_BACKUP);
 const missed = [];
 
 for (const [name, from, to] of MUTATIONS) {
+  const target = fileFor(name);
+  const original = readFileSync(target, "utf8");
   const mutated = original.replace(from, to);
   if (mutated === original) {
-    console.log(`AUFBAU-FEHLER  ${name}: das Muster kommt in ${FILE} nicht vor`);
+    console.log(`AUFBAU-FEHLER  ${name}: das Muster kommt in ${target} nicht vor`);
     missed.push(name);
     continue;
   }
-  writeFileSync(FILE, mutated);
+  writeFileSync(target, mutated);
 
   let caught = false;
   let firstFailure = "";
@@ -81,10 +97,11 @@ for (const [name, from, to] of MUTATIONS) {
   if (caught && firstFailure) console.log("            " + firstFailure.slice(0, 90));
   if (!caught) missed.push(name);
 
-  writeFileSync(FILE, original);
+  writeFileSync(target, original);
 }
 
 copyFileSync(BACKUP, FILE);
+copyFileSync(INDEX_BACKUP, INDEX);
 
 console.log();
 if (missed.length) {
