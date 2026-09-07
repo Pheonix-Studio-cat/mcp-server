@@ -95,9 +95,14 @@ const toolText = (payload) =>
   check("die vier Caracat-Werkzeuge sind da",
     ["ask_caracat_ai", "ask_caracat_code", "ask_caracat_pro", "list_assistants"]
       .every((n) => names.includes(n)), names.join(", "));
-  check("und die vier bestehenden Werkzeuge sind noch da",
-    ["greet", "add", "get_time", "fetch_url"].every((n) => names.includes(n)),
-    names.join(", "));
+  check("und die drei harmlosen Beispielwerkzeuge sind noch da",
+    ["greet", "add", "get_time"].every((n) => names.includes(n)), names.join(", "));
+  // fetch_url ist am 2026-09-07 entfernt worden, als der Worker unter einer
+  // oeffentlichen Adresse erreichbar wurde. Es lud jede URL ohne
+  // Authentifizierung; ein Werkzeug, das wieder auftaucht, ist ein offener
+  // Proxy, den niemand bemerkt haette.
+  check("fetch_url ist weg und kommt nicht zurueck",
+    !names.includes("fetch_url"), names.join(", "));
   check("kein Werkzeug nimmt eine Modelladresse entgegen",
     !(payload.result?.tools ?? []).some((t) =>
       Object.keys(t.inputSchema?.properties ?? {}).some((p) => /model|endpoint|host/i.test(p))),

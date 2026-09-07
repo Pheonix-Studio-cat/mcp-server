@@ -41,20 +41,27 @@ confirms they fail when the token is deliberately put into the body.
 - **Questions are length-capped** at 24,000 characters. The caller pays, but a
   tool without a limit invites tipping half a repository into it by accident.
 
-## ⚠️ `fetch_url` is a different matter
+## `fetch_url` was removed
 
-`fetch_url` predates the Caracat tools and is left as it was found — removing
-somebody's tool is not a decision this change makes. But it should be said
-plainly:
+The scaffold this server grew from had a fourth example tool, `fetch_url`, which
+fetched any URL it was given with no authentication.
 
-**`fetch_url` fetches any URL it is given, with no authentication.** Once the
-address of this Worker is known, it is an open proxy running on the operator's
-Cloudflare account and presenting the operator's egress. It can be pointed at
-private network addresses, at metadata endpoints, and at anything else the
-runtime can reach.
+While nothing was deployed, that was an exercise. On **2026-09-07** the Worker
+went live at a public `workers.dev` address, and the same code became an open
+proxy: anyone who learned the address could have this account fetch arbitrary
+pages — private network addresses and cloud metadata endpoints included — with
+the operator's egress IP and on the operator's bill.
 
-If that is not wanted, the fix is to delete the tool or to restrict it to an
-allowlist of hosts written into the source.
+It was removed rather than restricted. An allowlist would work, but it is a list
+somebody has to maintain, and no tool is the smaller attack surface.
+
+**A check holds it:** `checks/check-caracat.mjs` asserts `fetch_url` is not in
+`tools/list`, and the counter-proof puts a URL-fetching tool back to confirm the
+assertion actually fails when it returns.
+
+If something like it is ever wanted again: **the hosts belong in the source as
+constants, never in a parameter.** That is the rule the model repository applies
+to its GitHub module, for exactly this reason.
 
 ## The personalities are fetched, not stored
 

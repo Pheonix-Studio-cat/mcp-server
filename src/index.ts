@@ -90,60 +90,22 @@ function createServer(request?: Request) {
     },
   );
 
-  // --- Tool 4: echter ausgehender Request + Fehlerbehandlung --------------
-  server.registerTool(
-    "fetch_url",
-    {
-      description:
-        "Laedt eine oeffentliche URL und gibt den Anfang des Inhalts zurueck.",
-      inputSchema: {
-        url: z.string().url().describe("Vollstaendige https-URL"),
-        maxChars: z
-          .number()
-          .int()
-          .min(100)
-          .max(20000)
-          .optional()
-          .describe("Maximale Zeichenzahl der Antwort, Standard 5000"),
-      },
-    },
-    async ({ url, maxChars }) => {
-      const limit = maxChars ?? 5000;
-      try {
-        const response = await fetch(url, {
-          headers: { "user-agent": "my-mcp-server/1.0" },
-        });
-        const body = await response.text();
-        const truncated = body.length > limit;
-        return {
-          structuredContent: {
-            url,
-            status: response.status,
-            contentType: response.headers.get("content-type"),
-            truncated,
-          },
-          content: [
-            {
-              type: "text",
-              text: truncated ? `${body.slice(0, limit)}\n...[gekuerzt]` : body,
-            },
-          ],
-        };
-      } catch (error) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `Abruf fehlgeschlagen: ${
-                error instanceof Error ? error.message : String(error)
-              }`,
-            },
-          ],
-        };
-      }
-    },
-  );
+  // --- Tool 4 gab es hier einmal: fetch_url -----------------------------
+  //
+  // Es lud jede URL, die man ihm gab, ohne Authentifizierung. Solange dieser
+  // Worker nicht deployt war, war das eine Uebung. Seit dem 2026-09-07 ist er
+  // unter einer oeffentlichen Adresse erreichbar, und damit war es ein offener
+  // Proxy: wer die Adresse kennt, laesst dieses Konto beliebige Seiten abrufen
+  // -- interne Adressen und Metadaten-Endpunkte eingeschlossen -- mit der IP
+  // und auf die Rechnung des Betreibers.
+  //
+  // Entfernt, nicht eingeschraenkt. Eine Erlaubnisliste waere denkbar, aber
+  // sie waere eine Liste, die jemand pflegen muss; kein Werkzeug ist die
+  // kleinere Angriffsflaeche.
+  //
+  // Falls so etwas je zurueckkommt: die Hosts gehoeren als Konstanten in den
+  // Code, nie als Parameter. Dieselbe Regel wie fuer die GitHub-Hosts im
+  // Modell-Repo, aus demselben Grund.
 
   return server;
 }
