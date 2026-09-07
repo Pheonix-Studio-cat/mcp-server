@@ -1,0 +1,63 @@
+my-mcp-server
+Copyright 2026 Caracat Code Project
+
+This product includes software developed by the Caracat Code Project.
+
+================================================================================
+The assistants this server exposes
+================================================================================
+
+Three assistants, on three different base models. None of them has its own
+weights: each is a personality and an interface over someone else's model, and
+this repository contains no model files at all.
+
+    Caracat AI is based on gpt-oss-20b by OpenAI.
+
+        Upstream model    openai/gpt-oss-20b
+        Upstream URL      https://huggingface.co/openai/gpt-oss-20b
+        Upstream license  Apache License 2.0
+
+    Caracat Code is based on Qwen3-Coder-Next by Qwen.
+
+        Upstream model    Qwen/Qwen3-Coder-Next
+        Upstream URL      https://huggingface.co/Qwen/Qwen3-Coder-Next
+        Upstream license  Apache License 2.0
+
+    Caracat Pro is based on DeepSeek-V3.1 by DeepSeek.
+
+        Upstream model    deepseek-ai/DeepSeek-V3.1
+        Upstream URL      https://huggingface.co/deepseek-ai/DeepSeek-V3.1
+        Upstream license  MIT License
+
+No name may be used for another, and none may be attributed to another's
+creator. The Apache-2.0 and MIT licences are not interchangeable and are not
+described as one thing -- see THIRD_PARTY_LICENSES.md.
+
+Every answer these tools return carries its assistant's attribution with it.
+That is deliberate: a tool has no header to put it in, and an answer passed on
+through two more systems would otherwise arrive with no trace of whose model
+produced it.
+
+================================================================================
+The personalities
+================================================================================
+
+The three system prompts are not stored in this repository. They are fetched at
+build time from prompts/ in the model repository, so that each has exactly one
+source:
+
+    https://github.com/Pheonix-Studio-cat/training-and-devoloping-caracat-code
+
+================================================================================
+Scope of this NOTICE
+================================================================================
+
+The Apache License 2.0 in the LICENSE file of this repository applies to the
+original source code authored for this project.
+
+It does not, by itself, grant any rights in the upstream model weights. Those
+remain governed by the licenses under which OpenAI, Qwen and DeepSeek
+distribute them, respectively.
+
+Third-party components and their licenses are listed in
+THIRD_PARTY_LICENSES.md.

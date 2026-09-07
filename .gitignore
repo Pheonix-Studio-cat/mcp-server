@@ -4,3 +4,7 @@ node_modules/
 .env
 dist/
 worker-configuration.d.ts
+
+# Erzeugt von scripts/fetch-personas.mjs. Die Quelle sind die Dateien in
+# prompts/ des Modell-Repos -- eine zweite Kopie hier waere eine, die driftet.
+src/personas.generated.ts
