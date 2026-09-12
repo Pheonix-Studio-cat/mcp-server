@@ -60,11 +60,82 @@ ein Server ohne sie waere kein Caracat, sondern ein nackter Modellaufruf.
 
 ```bash
 npm run typecheck
-npm run check              # 42 Pruefungen gegen den echten Handler
-node checks/counterproof.mjs   # bricht ihn absichtlich, sieben Mal
+npm run check              # gegen den echten Handler, Caracat und 3D
+npm run counterproof       # bricht ihn absichtlich, 22 Mal
 ```
 
 Beides ohne Netz zum Anbieter: Hugging Face wird gestubbt, nichts kostet Geld.
+
+## 3d-gen-1: Text zu 3D
+
+Vier weitere Werkzeuge erzeugen aus einem kurzen Text ein 3D-Mesh
+(`.obj`) mit `Chinook416/3d-gen-1`.
+
+| Werkzeug | Wofuer |
+| --- | --- |
+| `list_3d_models` | was das Modell ist, woher es kommt, was es kann. Braucht keinen Schluessel |
+| `generate_3d` | startet die Erzeugung und gibt sofort eine Job-Kennung zurueck |
+| `get_3d_job` | Stand des Jobs, und wenn fertig die Adresse der `.obj` |
+| `cancel_3d_job` | bricht einen laufenden Job ab — das einzige Werkzeug hier, das Geld spart |
+
+### Warum das anders laeuft als Caracat
+
+Ein Caracat-Aufruf ist eine HTTP-Anfrage an die Inference Providers. Fuer
+`3d-gen-1` gibt es nichts anzufragen, aus zwei Gruenden:
+
+1. **`text-to-3d` bedienen die Inference Providers nicht.** Ihre Aufgabenliste
+   kennt `text-to-image` und `text-to-video`, nicht dies.
+2. **`Chinook416/3d-gen-1` ist eine Kopie**, kein Karten-Repo: dieselbe README,
+   dieselbe `config.json` und dieselbe `mesh-transformer.bin` wie
+   [`MarcusLoren/MeshGPT-preview`](https://huggingface.co/MarcusLoren/MeshGPT-preview).
+   Eine Kopie bedient ohnehin kein Anbieter.
+
+Also mietet `generate_3d` eine Maschine: es startet einen **Hugging Face Job**,
+der [`jobs/generate_3d.py`](https://github.com/Pheonix-Studio-cat/3d-ai-plugin/blob/main/jobs/generate_3d.py)
+aus dem Repo `3d-ai-plugin` ausfuehrt, das Modell laedt, das Mesh erzeugt und
+die `.obj` in ein Dataset-Repo legt.
+
+Das dauert Minuten, nicht Sekunden — deshalb drei Werkzeuge statt einem: ein
+MCP-Aufruf, der zehn Minuten offen haelt, ist in jedem Client ein Timeout.
+
+### Wer bezahlt: du, auf deinem Guthaben
+
+Der Job laeuft in **deinem** Namensraum und wird nach Sekunden auf **dein**
+Hugging-Face-Guthaben abgerechnet. Welcher Namensraum das ist, fragt der Server
+bei `whoami-v2` — es gibt keinen Parameter dafuer, gerade damit niemand einen
+Job auf fremde Rechnung starten kann.
+
+Dafuer braucht es:
+
+- ein **positives Guthaben** ([Billing](https://huggingface.co/settings/billing)) —
+  Jobs sind pay-as-you-go, das kostenlose Kontingent der Inference Providers
+  gilt hier nicht;
+- einen Token mit **Schreibrecht auf den eigenen Namensraum**.
+
+Voreinstellung ist die kleinste GPU (`t4-small`) mit 20 Minuten Zeitlimit. Die
+grossen Maschinen stehen absichtlich nicht zur Wahl: der Aufrufer zahlt selbst,
+aber ein Tippfehler soll hoechstens Kleingeld kosten. Aktuelle Preise stehen in
+der [Jobs-Preisliste](https://huggingface.co/docs/hub/jobs-pricing).
+
+### Beispiel
+
+```
+generate_3d  { "prompt": "wooden chair" }
+  → job_id abc123…, result_url https://huggingface.co/datasets/<du>/3d-gen-1-output/resolve/main/generated/…-wooden-chair.obj
+
+get_3d_job   { "job_id": "abc123…" }
+  → RUNNING … dann COMPLETED, mit der Adresse der .obj
+```
+
+Das Modell ist auf 4000 Objekte mit hoechstens 250 Dreiecken und 800
+Bezeichnungen trainiert (laut Modellkarte). „chair", „table", „ladder" sind, wofuer
+es gebaut ist; eine ganze Szene ist es nicht.
+
+> ⚠️ **Noch nie durchgelaufen.** Die Werkzeuge sind gegen den echten Handler
+> geprueft und gegengeprueft, aber der Job selbst ist nie auf echter Hardware
+> gestartet worden — die Sitzungsumgebung, in der er entstand, erreicht
+> `huggingface.co` nur ueber einen Connector und kann keine GPU mieten. Wer ihn
+> zuerst startet, sollte damit rechnen, etwas nachbessern zu muessen.
 
 ## Stack
 

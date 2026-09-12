@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import { registerCaracatTools } from "./caracat";
+import { registerThreeDTools } from "./threed";
 
 /**
  * Baut fuer jeden Request eine frische McpServer-Instanz.
@@ -19,6 +20,12 @@ function createServer(request?: Request) {
   // weil der Hugging-Face-Schluessel des Aufrufers in deren
   // Authorization-Header steht -- dieser Server haelt keinen eigenen.
   registerCaracatTools(server, request);
+
+  // `3d-gen-1`: Text zu 3D-Mesh. Dieselbe Bezahl-Regel wie oben, aus demselben
+  // Grund -- nur teurer, weil hier eine GPU nach Sekunden gemietet wird statt
+  // Token abgerechnet zu werden. Auch diese Werkzeuge brauchen die
+  // urspruengliche Anfrage, weil der Schluessel des Aufrufers darin steht.
+  registerThreeDTools(server, request);
 
   // --- Tool 1: einfachster Fall, ein optionaler String-Parameter -----------
   server.registerTool(

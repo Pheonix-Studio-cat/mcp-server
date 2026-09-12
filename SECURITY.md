@@ -29,6 +29,59 @@ into the request body, not into an error message, not into a tool result. Two
 checks in `checks/check-caracat.mjs` assert exactly that, and the counter-proof
 confirms they fail when the token is deliberately put into the body.
 
+## The 3D tools rent a machine, and the caller owns it
+
+`generate_3d` does not call a model endpoint — no inference provider serves
+`text-to-3d`. It starts a **Hugging Face Job**: a GPU rented by the second,
+running a script, then shut down.
+
+That raises the stakes of the same decision. A public address that spends
+someone else's inference credit is an open wallet; one that rents someone
+else's *hardware* by the minute empties faster. So:
+
+- **The namespace comes from `whoami-v2`, never from a parameter.** The job is
+  created in the caller's own namespace and billed to the caller's own balance.
+  There is no way to ask for a different one.
+- **The script is a constant** in `src/threed.ts`, pointing at one file in one
+  repository. A parameter that took a script URL would be "run arbitrary code
+  on someone else's account" — the most expensive open proxy there is.
+- **The image is a constant**, and the machine is a fixed list (`cpu-basic`
+  through `a10g-small`). The eight-H200 flavors are not offered. The caller pays
+  either way; this is a brake on the typo, not on the caller.
+- **Every job carries a timeout** (20 minutes). A forgotten job stops costing
+  money on its own.
+- **Prompts cannot begin with `-`,** and `output_repo` must match `owner/name`.
+  The command is an array with no shell between it and the container, but the
+  script's own argument parser sees only strings.
+
+### Where the token goes here, and why it differs
+
+The Caracat rule is that the caller's token appears **only** in the outgoing
+header. The 3D tools keep that, and add exactly one place: `secrets.HF_TOKEN`
+in the job spec. The container has no other way to upload its result, and job
+secrets are the mechanism Hugging Face provides for it.
+
+That is a deliberate, narrow exception, and the check is written to match it
+rather than to wave it through: the token may appear in the header and in
+`secrets`, and **nowhere else** — not in `environment`, not in `command`, not in
+`labels`, not in the reply to the caller. The counter-proof moves it into each
+of those in turn and confirms the check fails every time.
+
+The token goes to `huggingface.co`, the same host that already sees it in the
+header. It goes nowhere else: a check asserts every outgoing request from these
+tools starts with that origin.
+
+### What is not defended against here
+
+- **A caller can spend their own money faster than they meant to.** A GPU
+  rented by the second is a different shape of cost from a token count.
+  `cancel_3d_job` exists for that, and every job has a timeout, but neither is
+  a budget.
+- **The job script is fetched at run time from `main`.** Whoever can push to
+  `Pheonix-Studio-cat/3d-ai-plugin` decides what runs on the caller's rented
+  machine. That is the same trust as installing the plugin, but it is worth
+  naming: it is not pinned to a commit.
+
 ## What the Caracat tools will not do
 
 - **No tool takes an address.** The Hugging Face endpoint is a constant in
