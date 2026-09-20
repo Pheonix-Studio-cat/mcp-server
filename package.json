@@ -8,7 +8,9 @@
     "dev": "npm run personas && wrangler dev",
     "deploy": "npm run personas && wrangler deploy",
     "typecheck": "tsc --noEmit",
-    "check": "node checks/check-caracat.mjs",
+    "check": "npm run check:caracat && npm run check:editor",
+    "check:caracat": "node checks/check-caracat.mjs",
+    "check:editor": "node checks/check-editor.mjs",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {
