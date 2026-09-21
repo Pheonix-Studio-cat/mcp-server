@@ -1,0 +1,196 @@
+# Der KI-Pruefer: liest den Code, meldet Befunde als Issues.
+#
+# **Laeuft bei jedem Push und einmal taeglich** -- nicht 50-mal. Der Grund
+# ist nicht Sparsamkeit, sondern Logik: unveraenderter Code gibt dieselbe
+# Antwort. Ein Lauf auf demselben Stand, fuenfzigmal wiederholt, findet
+# fuenfzigmal dasselbe und kostet fuenfzigmal. Bei Push laeuft er, wenn sich
+# wirklich etwas geaendert hat; der taegliche Lauf ist das Netz darunter.
+#
+# ## Drei Schranken gegen die Flut
+#
+# Sie stehen in `.github/ki-pruefer.py` und sind der eigentliche Inhalt:
+#
+# * **Ein Issue pro Datei**, dessen Text jeder Lauf neu schreibt. Damit ist
+#   die Wiedererkennung exakt statt geschaetzt -- und es ist egal, wie das
+#   Modell diesmal formuliert. Die erste Fassung erkannte Befunde am Titel
+#   wieder und legte prompt Dubletten an, weil das Modell dieselbe Sache
+#   beim zweiten Lauf anders nannte.
+# * **Obergrenze** -- hoechstens fuenf **neu angelegte** Issues pro Lauf.
+# * **Kennzeichnung** -- in jedem Issue steht, dass ein Modell die Befunde
+#   gemeldet hat und niemand sie geprueft hat.
+#
+# Geschlossen wird nur, was dieser Lauf angesehen hat. Bei einem Push sind
+# das die geaenderten Dateien; die Issues aller anderen bleiben stehen.
+#
+# ## Ohne Secret bleibt er gruen
+#
+# Fehlt `COPILOT_PAT`, sagt der Lauf das und hoert auf -- **ohne rot zu
+# werden**. Ein Repo, das taeglich grundlos rot blinkt, gewoehnt einen daran,
+# Rot zu uebersehen, und dann wird auch das echte Rot uebersehen. Beim
+# Knopfdruck von Hand ist es umgekehrt: da ist eine Absage die Antwort.
+name: KI-Pruefer
+
+on:
+  push:
+    # Gefiltert wird unten am Job, nicht hier: `branches:` braucht einen
+    # festen Namen, und dieselbe Datei liegt in siebzehn Repos -- eines
+    # davon heisst `master`. `github.event.repository.default_branch` weiss
+    # in jedem, wie sein Hauptzweig heisst.
+  schedule:
+    # Taeglich. Beim Ausrollen in weitere Repos wird die Minute verschoben,
+    # damit nicht siebzehn Laeufe gleichzeitig anklopfen.
+    - cron: "30 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  # Zwei Laeufe gleichzeitig wuerden denselben Befund zweimal anlegen: beide
+  # sehen dieselben offenen Issues, keiner sieht das Issue des anderen.
+  group: ki-pruefer-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  pruefen:
+    # **Bei einem Push nur auf dem Standardzweig.** Ohne diese Bedingung
+    # laeuft der Pruefer bei jedem Push auf jeden Arbeitszweig mit -- beim
+    # ersten Versuch hat das die Zahl der Laeufe verdoppelt und prompt
+    # Dubletten erzeugt. Zeitplan und Knopfdruck sind davon nicht betroffen.
+    if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Zwei Commits, damit bei einem Push der Unterschied sichtbar ist.
+          fetch-depth: 2
+
+      - name: Ist das Token hinterlegt?
+        id: token
+        env:
+          TOKEN: ${{ secrets.COPILOT_PAT }}
+          VON_HAND: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TOKEN:-}" ]; then
+            echo "weiter=nein" >> "$GITHUB_OUTPUT"
+            hinweis="Das Secret COPILOT_PAT fehlt in diesem Repo. Anzulegen unter Settings -> Secrets and variables -> Actions, mit demselben Wert wie in den anderen Repos."
+            if [ "$VON_HAND" = "true" ]; then
+              echo "::error::$hinweis"
+              exit 1
+            fi
+            echo "::warning::$hinweis Der Lauf hoert hier auf, ohne rot zu werden."
+            exit 0
+          fi
+          echo "weiter=ja" >> "$GITHUB_OUTPUT"
+          echo "Token ist hinterlegt."
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: steps.token.outputs.weiter == 'ja'
+        with:
+          node-version: "24"
+
+      - name: Copilot-CLI installieren
+        if: steps.token.outputs.weiter == 'ja'
+        run: npm install -g @github/copilot
+
+      - name: Was soll angesehen werden?
+        id: stoff
+        if: steps.token.outputs.weiter == 'ja'
+        run: |
+          set -euo pipefail
+          # Bei einem Push nur das Geaenderte -- das ist der Punkt an "bei
+          # Push": alles andere wurde beim letzten Mal schon angesehen.
+          if [ "${{ github.event_name }}" = "push" ] && git rev-parse HEAD^ >/dev/null 2>&1; then
+            git diff --name-only HEAD^ HEAD > kandidaten.txt
+            echo "Push: $(wc -l < kandidaten.txt) geaenderte Datei(en)."
+          else
+            git ls-files > kandidaten.txt
+            echo "Voller Durchgang: $(wc -l < kandidaten.txt) Datei(en) im Repo."
+          fi
+          : > stoff.txt
+          : > angesehen.txt
+          zahl=0
+          while IFS= read -r datei; do
+            case "$datei" in
+              *.py|*.js|*.ts|*.tsx|*.jsx|*.go|*.rb|*.java|*.sh|*.php|*.cs|*.rs|*.c|*.h|*.cpp) ;;
+              *) continue ;;
+            esac
+            [ -f "$datei" ] || continue
+            groesse=$(wc -c < "$datei")
+            [ "$groesse" -gt 60000 ] && continue
+            {
+              echo "### $datei"
+              echo '```'
+              cat "$datei"
+              echo '```'
+              echo
+            } >> stoff.txt
+            echo "$datei" >> angesehen.txt
+            zahl=$((zahl + 1))
+            [ "$(wc -c < stoff.txt)" -gt 40000 ] && break
+          done < kandidaten.txt
+          echo "dateien=$zahl" >> "$GITHUB_OUTPUT"
+          echo "$zahl Quelldatei(en), $(wc -c < stoff.txt) Zeichen."
+
+      - name: Das Modell fragen
+        id: ki
+        if: steps.token.outputs.weiter == 'ja' && steps.stoff.outputs.dateien != '0'
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
+        run: |
+          # `set +e`: GitHub startet jeden run-Block mit `bash -e`, und dann
+          # braeche der Block ab, bevor die Meldung der CLI ausgegeben wird.
+          set +e
+          anweisung='Du pruefst Quelltext auf echte Fehler. Antworte mit NICHTS ausser einer JSON-Liste. Jeder Eintrag: {"titel": kurz und konkret, "datei": der Pfad wie angegeben, "zeile": Zahl oder null, "schwere": "hoch" | "mittel" | "niedrig", "begruendung": zwei bis vier Saetze auf Deutsch, die sagen was schiefgeht und unter welchen Umstaenden}. Melde nur, was wirklich falsch laufen kann: Abstuerze, falsche Ergebnisse, Sicherheitsluecken, nicht behandelte Fehlerfaelle, Nebenlaeufigkeit. Melde KEINEN Geschmack: keine Namensgebung, keine Formatierung, keine fehlenden Kommentare, keine Stilfragen. Findest du nichts, antworte mit []. Eine leere Liste ist eine vollstaendige Antwort und besser als ein erfundener Befund. Erfinde keine Dateinamen und keine Zeilennummern.'
+          printf '%s\n\n# Der Quelltext\n\n' "$anweisung" > auftrag.txt
+          cat stoff.txt >> auftrag.txt
+          copilot -p "$(cat auftrag.txt)" -s --no-ask-user > antwort.txt 2> fehler.txt
+          stand=$?
+          if [ "$stand" -ne 0 ]; then
+            echo "::error::Die Copilot-CLI ist mit Exit $stand ausgestiegen. Ihre eigene Meldung steht darunter."
+            echo "--- Meldung der CLI ---"
+            cat fehler.txt
+            echo "--- Ende ---"
+            exit "$stand"
+          fi
+          echo "Antwort: $(wc -c < antwort.txt) Zeichen."
+
+      - name: Befunde zu Issues machen
+        if: steps.token.outputs.weiter == 'ja' && steps.stoff.outputs.dateien != '0'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 .github/ki-pruefer.py \
+            --antwort antwort.txt \
+            --angesehen angesehen.txt \
+            --repo "${{ github.repository }}" \
+            --lauf "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      # **Kein `if:`.** Dieser Schritt sagt immer, was der Lauf getan hat --
+      # auch wenn er nichts getan hat. Ein stillschweigend uebersprungener
+      # Lauf sieht genauso aus wie ein erfolgreicher.
+      - name: Was ist passiert?
+        if: always()
+        env:
+          WEITER: ${{ steps.token.outputs.weiter }}
+          DATEIEN: ${{ steps.stoff.outputs.dateien }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## KI-Prüfer"
+            echo
+            if [ "${WEITER:-nein}" != "ja" ]; then
+              echo "**Nichts geprüft: das Secret \`COPILOT_PAT\` fehlt in diesem Repo.**"
+              echo
+              echo "Anzulegen unter *Settings → Secrets and variables → Actions*,"
+              echo "mit demselben Wert wie in den anderen Repos."
+            elif [ "${DATEIEN:-0}" = "0" ]; then
+              echo "Keine Quelldatei zum Ansehen — nichts geprüft, nichts gemeldet."
+            else
+              echo "$DATEIEN Datei(en) angesehen. Was dabei herauskam, steht im Protokoll"
+              echo "und gegebenenfalls als Issue."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
