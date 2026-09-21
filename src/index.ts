@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import { registerCaracatTools } from "./caracat";
+import { registerEditorTools } from "./editor";
 
 /**
  * Baut fuer jeden Request eine frische McpServer-Instanz.
@@ -19,6 +20,13 @@ function createServer(request?: Request) {
   // weil der Hugging-Face-Schluessel des Aufrufers in deren
   // Authorization-Header steht -- dieser Server haelt keinen eigenen.
   registerCaracatTools(server, request);
+
+  // Der Videoeditor. Anders als die Caracat-Werkzeuge braucht er keinen
+  // Schluessel und ruft nichts von aussen auf: er rechnet auf einem
+  // JSON-Objekt und gibt einen Link zurueck. Geschnitten wird im Browser des
+  // Menschen, auf seinem eigenen Geraet -- durch diesen Worker laeuft nie ein
+  // einziges Bild.
+  registerEditorTools(server);
 
   // --- Tool 1: einfachster Fall, ein optionaler String-Parameter -----------
   server.registerTool(
@@ -122,7 +130,10 @@ export default {
     // Kleine Landingpage, damit der Worker im Browser nicht leer wirkt.
     if (url.pathname === "/") {
       return new Response(
-        `my-mcp-server laeuft.\n\nMCP-Endpoint: ${url.origin}/mcp\n`,
+        `my-mcp-server laeuft.\n\nMCP-Endpoint: ${url.origin}/mcp\n\n` +
+          "Werkzeuge: die drei Caracat-Assistenten (brauchen einen eigenen\n" +
+          "Hugging-Face-Schluessel als Bearer-Token) und der Videoeditor\n" +
+          "(braucht keinen).\n",
         { headers: { "content-type": "text/plain; charset=utf-8" } },
       );
     }

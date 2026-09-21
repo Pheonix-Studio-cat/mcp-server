@@ -10,6 +10,14 @@ https://my-mcp-server.<dein-subdomain>.workers.dev/mcp
 die du in Claude, VS Code, im MCP Inspector oder in jedem anderen MCP-Client
 eintragen kannst.
 
+Der Server stellt zwei Dinge bereit, die nichts miteinander zu tun haben ausser
+der Adresse: die **drei Caracat-Assistenten** und den **Videoeditor**.
+
+| | braucht einen Schluessel | ruft nach aussen |
+| --- | --- | --- |
+| Caracat | ja, den des Aufrufers | Hugging Face |
+| Videoeditor | nein | nichts |
+
 ## Caracat
 
 Dieser Server stellt die drei Caracat-Assistenten als Werkzeuge bereit, damit
@@ -60,11 +68,88 @@ ein Server ohne sie waere kein Caracat, sondern ein nackter Modellaufruf.
 
 ```bash
 npm run typecheck
-npm run check              # 42 Pruefungen gegen den echten Handler
+npm run check                  # beide Pruefsaetze
+npm run check:caracat          # 42 Pruefungen gegen den echten Handler
+npm run check:editor           # 46 Pruefungen der Videoeditor-Werkzeuge
 node checks/counterproof.mjs   # bricht ihn absichtlich, sieben Mal
 ```
 
 Beides ohne Netz zum Anbieter: Hugging Face wird gestubbt, nichts kostet Geld.
+
+Die Editor-Pruefungen brauchen ueberhaupt kein Netz, und eine davon prueft
+genau das: `fetch` wird gezaehlt und muss am Ende bei **null** stehen. Ein
+Werkzeug, das unbemerkt anfinge, irgendwohin zu sprechen, waere eine Rechnung
+und ein Datenabfluss zugleich.
+
+Zwei weitere Pruefungen sind es wert, genannt zu werden, weil sie die
+unangenehmsten Fehler abdecken: dass der Plan **im Link** derselbe ist wie der
+in der Antwort (beides sieht sonst richtig aus, nur nicht zusammen), und dass
+der Link auf **genau eine** Adresse zeigt und das die des Editors ist.
+
+## Der Videoeditor
+
+Der Editor selbst liegt in
+[`cut-video-connector`](https://github.com/Pheonix-Studio-cat/cut-video-connector)
+und laeuft vollstaendig im Browser. Was er nicht kann, ist: sich sagen lassen,
+was geschnitten werden soll. Dafuer sind diese Werkzeuge da.
+
+| Werkzeug | Wofuer |
+| --- | --- |
+| `video_editor` | die Adresse des Editors, was er kann und was er **nicht** kann |
+| `build_cut_plan` | aus "nimm Sekunde 10 bis 20 raus" einen Schnittplan und einen Link bauen |
+| `check_cut_plan` | einen Plan pruefen und sagen, was er tut -- plus frischen Link |
+| `cut_plan_format` | das Format, ausgeschrieben, mit Beispiel |
+
+**Keiner davon braucht einen Schluessel, und keiner ruft irgendetwas auf.** Es
+ist Rechnen auf einem JSON-Objekt. Durch diesen Worker laeuft **nie ein
+einziges Bild** -- geschnitten wird auf dem Geraet des Menschen, im Browser.
+
+Der Ablauf:
+
+1. Das Modell fragt, wie lang das Video ist und wo die interessanten Stellen
+   liegen. Alles in Sekunden der **Originaldatei**.
+2. `build_cut_plan` mit dem, was weg soll und was wegradiert werden soll.
+3. Der Mensch bekommt den Link, oeffnet ihn, waehlt dieselbe Datei -- und der
+   Schnitt ist schon da, zum Nachsehen, Nachbessern und Exportieren.
+
+Dass es ein Link ist und keine Datei, ist kein Zufall: der Projektinhaber
+arbeitet vom iPad und hat keine Kommandozeile. Was ein Terminal braeuchte, muss
+etwas werden, das man antippt.
+
+### Zwei Regeln, an denen die meisten Plaene scheitern
+
+**Zeiten sind Sekunden der Originaldatei, nie Bildnummern.** Eine Bildnummer
+bedeutet ohne Bildrate nichts, und Handyaufnahmen haben oft gar keine feste.
+
+**Maskenkoordinaten sind Bruchteile des Bildes (0..1), nie Pixel.** Ein Plan,
+der gegen eine kleine Vorschau gebaut wurde, muss auf dem 4K-Original dasselbe
+bedeuten -- und ein Plan aus einem Werkzeugaufruf wurde geschrieben, ohne die
+Datei je gesehen zu haben. Pixel sind der haeufigste Fehler, und `check_cut_plan`
+sagt genau das, wenn er auftritt.
+
+### Eine Kopie, die driften kann
+
+`edl.js` im Editor-Repo ist die **massgebliche** Fassung des Formats. Die
+Pruefung in `src/editor.ts` ist eine zweite Kopie, und eine zweite Kopie kann
+auseinanderlaufen. Zwei Dinge machen das harmlos: in jedem Plan stehen `format`
+und `version`, ein Unterschied faellt also auf statt missverstanden zu werden;
+und jeder Plan wird im Editor **noch einmal** geprueft, bevor ein einziges Bild
+angefasst wird. Ein Plan, den dieser Worker falsch gebaut hat, scheitert dort
+laut -- nicht leise im Export.
+
+(Dieselbe Doppelung, aus demselben Grund, wie `DEEP_INSTRUCTION` in
+`caracat.ts`: es gibt kein Modul, das ein Cloudflare Worker und eine statische
+Seite auf GitHub Pages beide laden koennen.)
+
+### Was bewusst fehlt
+
+**Kein Werkzeug, das einen ffmpeg-Befehl ausgibt.** Es waere naheliegend und es
+gibt zwei Gruende dagegen: der Projektinhaber hat keine Kommandozeile, in der
+er ihn ausfuehren koennte, und ein Befehl, der einen Dateinamen aus einem
+Parameter in eine Shell-Zeile setzt, ist eine Einladung zur Befehlsinjektion --
+auch wenn hier nur Text zurueckgegeben wird. Dieselbe Regel wie beim
+entfernten `fetch_url` weiter unten: kein Werkzeug ist die kleinere
+Angriffsflaeche.
 
 ## Stack
 
