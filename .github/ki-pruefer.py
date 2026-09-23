@@ -123,7 +123,11 @@ def befunde_aus_text(text: str) -> list[dict]:
     for eintrag in daten:
         if not isinstance(eintrag, dict):
             raise Unbrauchbar("ein Eintrag in der Liste ist kein Objekt")
-        fehlt = [f for f in ("titel", "datei", "schwere", "begruendung") if not eintrag.get(f)]
+        fehlt = [
+            f
+            for f in ("titel", "datei", "schwere", "begruendung")
+            if not eintrag.get(f)
+        ]
         if fehlt:
             raise Unbrauchbar(f"einem Befund fehlen Felder: {', '.join(fehlt)}")
         # Ein Modell liefert auch schon mal eine Zahl, wo Text stehen soll.
@@ -132,7 +136,8 @@ def befunde_aus_text(text: str) -> list[dict]:
         for feld in ("titel", "datei", "schwere", "begruendung"):
             if not isinstance(eintrag[feld], str):
                 raise Unbrauchbar(
-                    f"das Feld {feld!r} ist kein Text, sondern {type(eintrag[feld]).__name__}"
+                    f"das Feld {feld!r} ist kein Text, sondern "
+                    f"{type(eintrag[feld]).__name__}"
                 )
         if eintrag["schwere"] not in ("hoch", "mittel", "niedrig"):
             raise Unbrauchbar(f"unbekannte Schwere: {eintrag['schwere']!r}")
@@ -225,14 +230,23 @@ def issue_text(datei: str, befunde: list[dict], repo: str, lauf: str) -> str:
             befund["begruendung"],
             "",
         ]
-    teile += ["---", "", f"KI-Prüfer in `{repo}`. [Der Lauf]({lauf})", "", marke_von(datei), ""]
+    teile += [
+        "---",
+        "",
+        f"KI-Prüfer in `{repo}`. [Der Lauf]({lauf})",
+        "",
+        marke_von(datei),
+        "",
+    ]
     return "\n".join(teile)
 
 
 # --- Alles ab hier redet mit GitHub. Darueber nichts, damit es pruefbar bleibt.
 
 
-def _anfrage(pfad: str, token: str, daten: dict | None = None, verfahren: str = "") -> object:
+def _anfrage(
+    pfad: str, token: str, daten: dict | None = None, verfahren: str = ""
+) -> object:
     ziel = f"https://api.github.com{pfad}"
     leib = json.dumps(daten).encode() if daten is not None else None
     art = verfahren or ("POST" if daten else "GET")
@@ -249,7 +263,10 @@ def offene_issues(repo: str, token: str) -> list[dict]:
     gesammelt: list[dict] = []
     seite = 1
     while True:
-        teil = _anfrage(f"/repos/{repo}/issues?state=open&labels={ETIKETT}&per_page=100&page={seite}", token)
+        teil = _anfrage(
+            f"/repos/{repo}/issues?state=open&labels={ETIKETT}&per_page=100&page={seite}",
+            token,
+        )
         if not isinstance(teil, list) or not teil:
             break
         gesammelt.extend(teil)
@@ -259,18 +276,31 @@ def offene_issues(repo: str, token: str) -> list[dict]:
         if seite > 20:
             # Nicht stillschweigend abschneiden: ab hier gaelte jede Datei
             # dahinter als neu, und der Bot legte Dubletten an.
-            print("::warning::Mehr als 2000 offene KI-Issues -- ab hier ist die Wiedererkennung blind.")
+            print(
+                "::warning::Mehr als 2000 offene KI-Issues -- "
+                "ab hier ist die Wiedererkennung blind."
+            )
             break
     return gesammelt
 
 
 def main() -> int:
-    zerleger = argparse.ArgumentParser(description="Befunde eines Modells zu Issues machen.")
-    zerleger.add_argument("--antwort", required=True, help="Datei mit der Antwort des Modells")
-    zerleger.add_argument("--angesehen", required=True, help="Datei mit den gelesenen Pfaden, einer pro Zeile")
+    zerleger = argparse.ArgumentParser(
+        description="Befunde eines Modells zu Issues machen."
+    )
+    zerleger.add_argument(
+        "--antwort", required=True, help="Datei mit der Antwort des Modells"
+    )
+    zerleger.add_argument(
+        "--angesehen",
+        required=True,
+        help="Datei mit den gelesenen Pfaden, einer pro Zeile",
+    )
     zerleger.add_argument("--repo", required=True, help="owner/name")
     zerleger.add_argument("--lauf", default="", help="URL des Actions-Laufs")
-    zerleger.add_argument("--trocken", action="store_true", help="nur sagen, nichts anlegen")
+    zerleger.add_argument(
+        "--trocken", action="store_true", help="nur sagen, nichts anlegen"
+    )
     werte = zerleger.parse_args()
 
     token = os.environ.get("GITHUB_TOKEN", "")
@@ -294,24 +324,37 @@ def main() -> int:
         return 2
 
     gefunden = nach_dateien(befunde)
-    bestehend = {} if werte.trocken else dateien_aus_issues(offene_issues(werte.repo, token))
+    bestehend = (
+        {} if werte.trocken else dateien_aus_issues(offene_issues(werte.repo, token))
+    )
     anlegen, aktualisieren, schliessen, zurueck = plan(gefunden, bestehend, angesehen)
 
-    print(f"{len(befunde)} Befund(e) in {len(gefunden)} Datei(en). {len(angesehen)} Datei(en) angesehen.")
+    print(
+        f"{len(befunde)} Befund(e) in {len(gefunden)} Datei(en). "
+        f"{len(angesehen)} Datei(en) angesehen."
+    )
     if zurueck:
-        print(f"::warning::{zurueck} Datei(en) zurueckgehalten -- hoechstens {GRENZE} neue Issues pro Lauf.")
+        print(
+            f"::warning::{zurueck} Datei(en) zurueckgehalten -- "
+            f"hoechstens {GRENZE} neue Issues pro Lauf."
+        )
 
     for datei in anlegen:
         leib = issue_text(datei, gefunden[datei], werte.repo, werte.lauf)
         if werte.trocken:
-            print(f"[trocken] neues Issue fuer {datei} ({len(gefunden[datei])} Befund(e))")
+            print(
+                f"[trocken] neues Issue fuer {datei} ({len(gefunden[datei])} Befund(e))"
+            )
             continue
         antwort = _anfrage(
             f"/repos/{werte.repo}/issues",
             token,
             {"title": titel_von(datei), "body": leib, "labels": [ETIKETT]},
         )
-        print(f"Angelegt: {antwort.get('html_url', '?') if isinstance(antwort, dict) else '?'}")
+        print(
+            "Angelegt: "
+            f"{antwort.get('html_url', '?') if isinstance(antwort, dict) else '?'}"
+        )
 
     for datei in aktualisieren:
         leib = issue_text(datei, gefunden[datei], werte.repo, werte.lauf)
@@ -319,7 +362,12 @@ def main() -> int:
             print(f"[trocken] Issue fuer {datei} neu schreiben")
             continue
         nummer = bestehend[datei]["number"]
-        _anfrage(f"/repos/{werte.repo}/issues/{nummer}", token, {"body": leib}, verfahren="PATCH")
+        _anfrage(
+            f"/repos/{werte.repo}/issues/{nummer}",
+            token,
+            {"body": leib},
+            verfahren="PATCH",
+        )
         print(f"Aktualisiert: #{nummer} ({datei})")
 
     for datei in schliessen:
@@ -330,12 +378,24 @@ def main() -> int:
         _anfrage(
             f"/repos/{werte.repo}/issues/{nummer}/comments",
             token,
-            {"body": "In dieser Datei findet der Prüfer nichts mehr. Wird geschlossen."},
+            {
+                "body": (
+                    "In dieser Datei findet der Prüfer nichts mehr. Wird geschlossen."
+                )
+            },
         )
-        _anfrage(f"/repos/{werte.repo}/issues/{nummer}", token, {"state": "closed"}, verfahren="PATCH")
+        _anfrage(
+            f"/repos/{werte.repo}/issues/{nummer}",
+            token,
+            {"state": "closed"},
+            verfahren="PATCH",
+        )
         print(f"Geschlossen: #{nummer} ({datei}) -- nichts mehr gefunden")
 
-    print(f"{len(anlegen)} neu, {len(aktualisieren)} aktualisiert, {len(schliessen)} geschlossen.")
+    print(
+        f"{len(anlegen)} neu, {len(aktualisieren)} aktualisiert, "
+        f"{len(schliessen)} geschlossen."
+    )
     return 0
 
 
